@@ -1,22 +1,24 @@
 # Program Created By: GC
 # Description: Scrapes the Newegg.com website and collects the relevant data and dumps it into a CSV file to be cleaned
 # Created Date: 4/1/2021
-# Version: 1.0
+# Version: 1.1
 
 #  --Ideas--
 
 # TODO Create my own file of categories and their corresponding URLs
 # TODO Save the unique ID in the URL and not the URL itself
 # TODO Make it possible to load a list of URLS to scrape instead of scraping everything
-# TODO Get the star number of each item in order and save it
+# TODO Get the unique number of each item in order and save it
 # TODO Save the category to each item
-# TODO Fix the naming of variables and make them more conventional
-#	   Such as filterBox and the multiple pages 
-# TODO Check for out of stock items
-
-# Maybe ignore all 1 star and non-reviewed products to protect integrity of the info we get?? Find a away around it
 
 # TODO Make cleaning the data into its own python script (Automatically call it here) yet keep a version of the dirty data in a CSV
+
+# Changelog
+
+# Changed variable names to more resemble what they actually are
+# Fixed getting the total page count for a given URL
+# Data now gets dumped after every URL
+# Added multiple pageSoups so it doesn't pull the same page every time
 
 from bs4 import BeautifulSoup as soup
 from urllib.request import urlopen as uReq
@@ -49,22 +51,7 @@ classNames = {
 	"ItemNumberOfReviews" : """"item-rating-num").text"""
 }
 
-# Holds the converted classNames so they are able to be executed as code
-execs = {}
-
-# The list which holds all the data
-# Very important to spell correctly. They are named the same as the className keys
-ModelNumber = []
-ItemName = []
-ItemBrand = []
-ItemURL = []
-ItemPriceBefore = []
-ItemPriceAfter = []
-ItemPercentSaved = []
-ItemShippingPrice = []
-ItemPromoDiscount = []
-ItemNumberOfReviews = []
-
+# Keeps track of time
 startTime = time.time()
 
 # Grab the beginning HTML page
@@ -79,13 +66,13 @@ pageSoup = soup(page_html, "html.parser")
 pagesToScrape = []
 
 # All of the filter boxes on the current page
-filterBoxes = pageSoup.find(class_="filter-box-body").findAll(class_="filter-box-list")
+categories = pageSoup.find(class_="filter-box-body").findAll(class_="filter-box-list")
 
 # Loop through all the filter boxes and save the pages
-for filterBox in filterBoxes:
+for category in categories:
 	# Save the URLs into the pagesToScrape
-	pagesToScrape.append(filterBox.a.get('href'))
-	print(filterBox.a.get('href'))
+	pagesToScrape.append(category.a.get('href'))
+	print(category.a.get('href'))
 
 # The total number of URLS we have scraped
 urlsCompleted = 0
@@ -93,22 +80,35 @@ urlsCompleted = 0
 # Loop through all the pages
 for url in pagesToScrape:
 
-	# Find The Page Count
-	pageCount = 0
+	# The list which holds all the data
+	# Very important to spell correctly. They are named the same as the className keys
+	ModelNumber = []
+	ItemName = []
+	ItemBrand = []
+	ItemURL = []
+	ItemPriceBefore = []
+	ItemPriceAfter = []
+	ItemPercentSaved = []
+	ItemShippingPrice = []
+	ItemPromoDiscount = []
+	ItemNumberOfReviews = []
 
-	pages = pageSoup.find("div", {"class":"btn-group"})
-
-	# Count the pages
-	for page in pages:
-		pageCount += 1
-
-	# TODO FIX and find out how to reliably get the page count
-	pageCount = 5
-
+	# The total amount of pages searched for the url
 	pagesSearched = 1
 
+	# Get the total number of pages
+	client = uReq(url)
+	html = client.read()
+	client.close()
+
+	pageSoup = soup(html, "html.parser")
+
+	totalPages = pageSoup.find(class_="list-tool-pagination-text").find('strong').text
+	totalPages = totalPages[2:]
+
 	# We search for pages - 3 since it includes the non first page, and the dead last page
-	while(pagesSearched != pageCount - 1):
+	while(str(pagesSearched) != totalPages):
+
 		# Sleep for a random amount of time between pulls in order to not get blocked
 		# TODO Look for ways around this so I can reduce the time it takes to complete the scrape
 		sleep(randint(1,2))
@@ -118,22 +118,24 @@ for url in pagesToScrape:
 
 		# Output current page number
 		if debug:
-			print("Loaded page # " + str(pagesSearched))
+			print("Loaded page # " + str(pagesSearched) + "/" + totalPages)
 
 		# Determine which URL to use
-		if(pagesSearched > 1):
-			uClient = uReq(url + "&Page=" + str(pageCount))
+		if(pagesSearched > 0):
+			uClient = uReq(url + "&Page=" + str(pagesSearched))
+			print(url + "&Page=" + str(pagesSearched))
 		else:
 			uClient = uReq(url)
 
 		# Grab the new page
-		page_html = uClient.read()
+		pagehtml = uClient.read()
+		pageSoup = soup(pagehtml, "html.parser")
 		uClient.close()
 
 		# Find all the items
-		# Could possibly skip this step (Incase the page does not have it) and use findAll wtih the class names
 		items = pageSoup.find("div", {"class":"item-cells-wrap border-cells items-grid-view four-cells expulsion-one-cell"})
 
+		# Loop through all the items
 		for item in items:
 			for classKey in classNames:
 				try:
@@ -145,21 +147,25 @@ for url in pagesToScrape:
 	# Console print the progress
 	urlsCompleted += 1
 
+	# Import it into a DataFrame
+	scrapedData = pd.DataFrame(list(zip(ModelNumber, ItemName, ItemBrand, ItemURL, ItemPriceBefore, ItemPriceAfter, ItemPercentSaved, ItemShippingPrice, ItemPromoDiscount, ItemNumberOfReviews)),
+								columns = ["Model #", "Item Name", "Brand", "URL", "Price Before", "Price After", "Percent Saved", "Shipping Price", "Promo Discount", "# of Reviews"])
+
+
+	# TODO Clean the data
+	# Add into debug mode to save a copy of the dirty data
+	# Make sure to import the new file and call the function which cleans the data
+	# Then save the data
+	scrapedData.drop_duplicates()
+
+	# Timestamp every column
+	scrapedData['Date'] = str(datetime.datetime.now().strftime("%d %B %Y"))
+
+	# Export the dataframe into a CSV file
+	scrapedData.to_csv("Newegg Scrape " + str(datetime.datetime.now().strftime("%d %B %Y")) + ".csv", mode='a')
+
 	if debug:
 		print("Completed URL  #" + str(urlsCompleted) + "/" + str(len(pagesToScrape)))
-
-
-# Import it into a DataFrame
-scrapedData = pd.DataFrame(list(zip(ModelNumber, ItemName, ItemBrand, ItemURL, ItemPriceBefore, ItemPriceAfter, ItemPercentSaved, ItemShippingPrice, ItemPromoDiscount, ItemNumberOfReviews)),
-							columns = ["Model #", "Item Name", "Brand", "URL", "Price Before", "Price After", "Percent Saved", "Shipping Price", "Promo Discount", "# of Reviews"])
-
-# TODO Clean the data
-
-# Timestamp every column
-scrapedData['Date'] = str(datetime.datetime.now().strftime("%d %B %Y"))
-
-# Export the dataframe into a CSV file
-scrapedData.to_csv("Newegg Scrape " + str(datetime.datetime.now().strftime("%d %B %Y")) + ".csv")
 
 # Print out the elapsed time
 print("Script ran successfully after: " + str(float(startTime) - float(time.time())))
