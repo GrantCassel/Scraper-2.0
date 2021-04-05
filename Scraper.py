@@ -10,15 +10,24 @@
 # TODO Make it possible to load a list of URLS to scrape instead of scraping everything
 # TODO Get the unique number of each item in order and save it
 # TODO Save the category to each item
+# TODO Change from date to timestamp (Can go from timestamp to date or time but can not go the other way around)
 
 # TODO Make cleaning the data into its own python script (Automatically call it here) yet keep a version of the dirty data in a CSV
 
 # Changelog
 
+# 1.1
 # Changed variable names to more resemble what they actually are
 # Fixed getting the total page count for a given URL
 # Data now gets dumped after every URL
 # Added multiple pageSoups so it doesn't pull the same page every time
+
+#1.2
+# Lists are now automatically created by the classNames key and are auto inputed into the dataframe
+# In order to add a new field to scrape you now just need to add a new key,value to classNames
+
+# TODO Somehow dynamically find page numbers (Or set a cap and delete the duplicates since they usually put the "best" items first)
+# TODO Load classNames from files within a folder to dynamically scrape through websites
 
 from bs4 import BeautifulSoup as soup
 from urllib.request import urlopen as uReq
@@ -82,16 +91,14 @@ for url in pagesToScrape:
 
 	# The list which holds all the data
 	# Very important to spell correctly. They are named the same as the className keys
-	ModelNumber = []
-	ItemName = []
-	ItemBrand = []
-	ItemURL = []
-	ItemPriceBefore = []
-	ItemPriceAfter = []
-	ItemPercentSaved = []
-	ItemShippingPrice = []
-	ItemPromoDiscount = []
-	ItemNumberOfReviews = []
+
+	# POSSIBLE TODO
+
+	# Auto exec the variables by the classNames key in order to make you only have to add the class kery
+
+	for key in classNames:
+		exec("global " + key + "; " + key + " = []")
+
 
 	# The total amount of pages searched for the url
 	pagesSearched = 1
@@ -105,6 +112,8 @@ for url in pagesToScrape:
 
 	totalPages = pageSoup.find(class_="list-tool-pagination-text").find('strong').text
 	totalPages = totalPages[2:]
+
+	totalPages = str(3)
 
 	# We search for pages - 3 since it includes the non first page, and the dead last page
 	while(str(pagesSearched) != totalPages):
@@ -147,15 +156,23 @@ for url in pagesToScrape:
 	# Console print the progress
 	urlsCompleted += 1
 
-	# Import it into a DataFrame
-	scrapedData = pd.DataFrame(list(zip(ModelNumber, ItemName, ItemBrand, ItemURL, ItemPriceBefore, ItemPriceAfter, ItemPercentSaved, ItemShippingPrice, ItemPromoDiscount, ItemNumberOfReviews)),
-								columns = ["Model #", "Item Name", "Brand", "URL", "Price Before", "Price After", "Percent Saved", "Shipping Price", "Promo Discount", "# of Reviews"])
+	classVariables = {}
 
+	# Get a list of all variables
+	for key in classNames.keys():
+		print(classNames[key])
+		classVariables[key] = globals()[str(key)]
+
+	# Import it into a DataFrame
+	scrapedData = pd.DataFrame.from_dict(classVariables)
 
 	# TODO Clean the data
 	# Add into debug mode to save a copy of the dirty data
 	# Make sure to import the new file and call the function which cleans the data
 	# Then save the data
+
+	print(scrapedData.head())
+
 	scrapedData.drop_duplicates()
 
 	# Timestamp every column
